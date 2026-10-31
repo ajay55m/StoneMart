@@ -184,3 +184,43 @@ To standardize future backend API endpoints, the PHP backend should adopt a cons
 }
 ```
 Currently, the Android app safely handles these inconsistencies inside the Repository layer (`AuthRepository`, `AttendanceRepository`, `LeaveRepository`), insulating the UI ViewModels from the mismatched backend formats.
+
+---
+
+## 6. Pro-Structure Implementation Blueprint (`refactor/pro-structure`)
+
+The project has been organized into the following industry-standard directory blueprint:
+
+```
+com.app.stonemart/
+├── data/
+│   ├── api/
+│   │   ├── ApiClient.java             # Low-level network transport, GZIP, and cookie handler
+│   │   └── ApiService.java            # High-level typed API service layer
+│   ├── model/
+│   │   ├── User.java                  # Typed Employee Profile model
+│   │   ├── Attendance.java            # Typed Attendance & Daily Log model
+│   │   ├── Leave.java                 # Typed Leave Request model
+│   │   └── Holiday.java               # Typed Calendar Holiday model
+│   └── repository/
+│       ├── AuthRepository.java        # Authentication & session repository
+│       ├── AttendanceRepository.java    # Monthly SWR cache & geofenced punch repository
+│       └── LeaveRepository.java       # Leave policy & submission repository
+├── ui/
+│   ├── login/
+│   │   └── LoginActivity.java         # Login screen controller
+│   ├── dashboard/
+│   │   └── DashboardActivity.java     # Main dashboard navigation shell
+│   ├── attendance/
+│   │   ├── HistoryFragment.java       # Calendar history view
+│   │   └── CalendarAdapter.java       # Calendar grid adapter
+│   └── leave/
+│       ├── ApplyLeaveActivity.java    # Leave submission activity portal
+│       └── LeaveApprovalActivity.java # Supervisor leave approval activity
+└── utils/
+    ├── Constants.java                 # Centralized endpoints, keys, and geofence defaults
+    ├── SessionManager.java            # Thread-safe SharedPreferences session manager
+    └── LocationHelper.java            # RTK GPS Geofence precision tracking utility
+```
+
+

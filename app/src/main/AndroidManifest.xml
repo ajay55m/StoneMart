@@ -39,11 +39,33 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.StoneMart.NoActionBar" />
 
+        <activity
+            android:name=".ui.login.LoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.StoneMart.NoActionBar" />
+
         <!-- Dashboard Activity -->
         <activity
             android:name=".DashboardActivity"
             android:exported="false"
             android:theme="@style/Theme.StoneMart.NoActionBar" />
+
+        <activity
+            android:name=".ui.dashboard.DashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.StoneMart.NoActionBar" />
+
+        <!-- Leave Module Activities -->
+        <activity
+            android:name=".ui.leave.ApplyLeaveActivity"
+            android:exported="false"
+            android:theme="@style/Theme.StoneMart" />
+
+        <activity
+            android:name=".ui.leave.LeaveApprovalActivity"
+            android:exported="false"
+            android:theme="@style/Theme.StoneMart" />
 
     </application>
 
