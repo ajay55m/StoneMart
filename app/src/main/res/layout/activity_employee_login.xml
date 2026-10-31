@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootLogin"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <!-- Skyscraper / Facility Background Image -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@drawable/bg_login_building" />
+
+    <!-- Dark Soft Dim Overlay -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#990B1329" />
+
+    <!-- Centered Scroll Container -->
+    <ScrollView
+        android:id="@+id/scrollViewLogin"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <!-- Middle Soft Light Card -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardLoginContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                app:cardBackgroundColor="#FFFFFF"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:paddingLeft="24dp"
+                    android:paddingTop="32dp"
+                    android:paddingRight="24dp"
+                    android:paddingBottom="32dp">
+
+                    <!-- Official STONE MART Logo -->
+                    <ImageView
+                        android:layout_width="200dp"
+                        android:layout_height="64dp"
+                        android:layout_marginBottom="16dp"
+                        android:adjustViewBounds="true"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/stonemart_logo" />
+
+                    <!-- Login Header Title -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Employee Login"
+                        android:textColor="#0F172A"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="24dp"
+                        android:text="Authorized Personnel Portal"
+                        android:textColor="#64748B"
+                        android:textSize="13sp" />
+
+                    <!-- Email / Employee ID Input -->
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/bg_light_input_field"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp">
+
+                        <ImageView
+                            android:id="@+id/ivEmailIcon"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_alignParentStart="true"
+                            android:layout_centerVertical="true"
+                            android:src="@android:drawable/ic_dialog_email"
+                            app:tint="#64748B" />
+
+                        <EditText
+                            android:id="@+id/etEmpId"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="12dp"
+                            android:layout_toEndOf="@id/ivEmailIcon"
+                            android:background="@null"
+                            android:hint="Email or Employee ID"
+                            android:inputType="text"
+                            android:textColor="#0F172A"
+                            android:textColorHint="#94A3B8"
+                            android:textSize="14sp" />
+                    </RelativeLayout>
+/
+                    <!-- Password Input with Eye Icon Toggle -->
+<RelativeLayout
+    android:layout_width="match_parent"
+    android:layout_height="52dp"
+    android:layout_marginBottom="16dp"
+    android:background="@drawable/bg_light_input_field"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+
+    <ImageView
+        android:id="@+id/ivLockIcon"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_alignParentStart="true"
+        android:layout_centerVertical="true"
+        android:src="@android:drawable/ic_secure"
+        app:tint="#64748B" />
+
+    <EditText
+        android:id="@+id/etPassword"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:layout_toEndOf="@id/ivLockIcon"
+        android:layout_toStartOf="@+id/ivTogglePassword"
+        android:background="@null"
+        android:hint="Password"
+        android:inputType="textPassword"
+        android:textColor="#0F172A"
+        android:textColorHint="#94A3B8"
+        android:textSize="14sp" />
+
+    <!-- Eye Icon to Toggle Password Visibility -->
+    <ImageView
+        android:id="@+id/ivTogglePassword"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Toggle Password Visibility"
+        android:padding="2dp"
+        android:src="@android:drawable/ic_menu_view"
+        app:tint="#64748B" />
+</RelativeLayout>
+
+
+                    <!-- Options Row: Forgot Password -->
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="24dp">
+
+                        <TextView
+                            android:id="@+id/tvForgotPassword"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:text="Forgot Password?"
+                            android:textColor="#1D4ED8"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </RelativeLayout>
+
+                    <!-- Cyber Metallic Interactive Potion Pill Button -->
+                    <com.app.stonemart.widget.CyberPillButton
+                        android:id="@+id/btnLogin"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:layout_marginTop="8dp"
+                        android:text="Log In" />
+
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+        </LinearLayout>
+    </ScrollView>
+
+</RelativeLayout>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_home"
+        android:icon="@drawable/ic_nav_home"
+        android:title="Home" />
+    <item
+        android:id="@+id/nav_checkin_checkout"
+        android:icon="@drawable/ic_nav_attendance"
+        android:title="Check In/Out" />
+    <item
+        android:id="@+id/nav_leave_form"
+        android:icon="@drawable/ic_nav_leave"
+        android:title="Leave Form" />
+    <item
+        android:id="@+id/nav_logout"
+        android:icon="@drawable/ic_nav_logout"
+        android:title="Logout" />
+</menu>

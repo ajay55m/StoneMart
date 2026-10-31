@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Stone Mart</string>
+    <string name="employee_login">Employee Login</string>
+    <string name="emp_id_hint">Employee ID / Phone Number</string>
+    <string name="password_hint">Password / PIN</string>
+    <string name="btn_login">Sign In</string>
+    <string name="nav_checkin">Check-In / Out</string>
+    <string name="nav_manage">Manage Logs</string>
+</resources>

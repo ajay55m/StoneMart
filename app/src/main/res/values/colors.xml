@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#0F172A</color>
+    <color name="primary_variant">#1E293B</color>
+    <color name="accent_blue">#1D4ED8</color>
+    <color name="accent_blue_light">#EFF6FF</color>
+    <color name="accent_emerald">#10B981</color>
+    <color name="accent_emerald_light">#ECFDF5</color>
+    <color name="accent_rose">#EF4444</color>
+    <color name="accent_rose_light">#FEF2F2</color>
+    <color name="accent_amber">#F59E0B</color>
+    <color name="accent_amber_light">#FFFBEB</color>
+    <color name="background_light">#F8FAFC</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="text_muted">#94A3B8</color>
+    <color name="divider">#E2E8F0</color>
+    <color name="blue_badge">#DBEAFE</color>
+    <color name="blue_badge_text">#1E40AF</color>
+</resources>
