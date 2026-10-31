@@ -10,12 +10,14 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 
+import com.app.stonemart.core.Resource;
+import com.app.stonemart.viewmodel.ManageAttendanceViewModel;
 import com.app.stonemart.widget.BigMonthlyCalendarView;
 import com.app.stonemart.widget.PremiumAlertDialog;
 
@@ -28,9 +30,13 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * ManageAttendanceFragment - MVVM View for monthly attendance calendar and metrics.
+ * Observes ManageAttendanceViewModel for data changes.
+ */
 public class ManageAttendanceFragment extends Fragment {
 
-    private UserLocalStore userStore;
+    private ManageAttendanceViewModel viewModel;
 
     private TextView tvAvatarInitials;
     private TextView tvEmpName;
@@ -47,9 +53,6 @@ public class ManageAttendanceFragment extends Fragment {
     private View btnFilterMonth;
     private TextView tvFilterMonthText;
     private BigMonthlyCalendarView bigCalendarView;
-
-    private int currentYear = 2026;
-    private int currentMonth = Calendar.OCTOBER;
 
     private TextView tvSelectedDateTitle;
     private TextView tvSelectedStatusBadge;
@@ -75,25 +78,28 @@ public class ManageAttendanceFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_manage_attendance, container, false);
-        userStore = new UserLocalStore(requireContext());
+        viewModel = new ViewModelProvider(this).get(ManageAttendanceViewModel.class);
 
         initViews(view);
         setupHeaderData();
+        setupCalendarInteractivity();
+        setupViewModelObservers();
 
-        Calendar todayCal = Calendar.getInstance();
-        currentYear = 2026;
-        currentMonth = Calendar.OCTOBER;
+        // Initial view setup from ViewModel state
+        int initialYear = viewModel.getCurrentYearValue();
+        int initialMonth = viewModel.getCurrentMonthValue();
+        int initialDay = viewModel.getSelectedDayValue();
 
         if (bigCalendarView != null) {
-            bigCalendarView.setYearMonth(currentYear, currentMonth);
-            bigCalendarView.setSelectedDay(todayCal.get(Calendar.DAY_OF_MONTH));
+            bigCalendarView.setYearMonth(initialYear, initialMonth);
+            bigCalendarView.setSelectedDay(initialDay);
         }
 
-        updateMonthTitle();
-        setupSummaryPills();
-        setupCalendarInteractivity();
+        updateMonthTitle(initialYear, initialMonth);
+        updateSelectedDayDetail(initialDay, BigMonthlyCalendarView.DayStatus.FUTURE);
 
-        updateSelectedDayDetail(todayCal.get(Calendar.DAY_OF_MONTH), BigMonthlyCalendarView.DayStatus.FUTURE);
+        // Fetch monthly data through ViewModel
+        viewModel.loadMonthlyAttendance(initialYear, initialMonth);
 
         return view;
     }
@@ -141,17 +147,37 @@ public class ManageAttendanceFragment extends Fragment {
         }
     }
 
-    private void updateMonthTitle() {
-        String monthName = new DateFormatSymbols(Locale.US).getMonths()[currentMonth];
+    private void setupViewModelObservers() {
+        viewModel.monthlyData.observe(getViewLifecycleOwner(), resource -> {
+            if (resource == null) return;
+            if (resource.getStatus() == Resource.Status.SUCCESS && resource.getData() != null) {
+                parseAndApplyEmployeeDetail(resource.getData());
+            } else if (resource.getStatus() == Resource.Status.ERROR) {
+                Log.e("ManageAttendance", "Failed to load monthly attendance: " + resource.getMessage());
+            }
+        });
+
+        viewModel.currentMonth.observe(getViewLifecycleOwner(), month -> {
+            updateMonthTitle(viewModel.getCurrentYearValue(), month);
+        });
+
+        viewModel.currentYear.observe(getViewLifecycleOwner(), year -> {
+            updateMonthTitle(year, viewModel.getCurrentMonthValue());
+        });
+    }
+
+    private void updateMonthTitle(int year, int month) {
+        String monthName = new DateFormatSymbols(Locale.US).getMonths()[month];
         if (tvCalendarMonthTitle != null) {
-            tvCalendarMonthTitle.setText(monthName + " " + currentYear + " Calendar");
+            tvCalendarMonthTitle.setText(monthName + " " + year + " Calendar");
         }
         if (tvFilterMonthText != null) {
-            tvFilterMonthText.setText(monthName.substring(0, 3) + " " + currentYear);
+            tvFilterMonthText.setText(monthName.substring(0, 3) + " " + year);
         }
     }
 
     private void setupHeaderData() {
+        UserLocalStore userStore = viewModel.getUserStore();
         String empName = userStore.getEmpName();
         String empId = userStore.getEmpId();
         String storeName = userStore.getStoreName();
@@ -178,57 +204,13 @@ public class ManageAttendanceFragment extends Fragment {
         }
     }
 
-    private void setupSummaryPills() {
-        fetchEmployeeDetailFromApi(currentYear, currentMonth);
-    }
-
-    private void fetchEmployeeDetailFromApi(int year, int month) {
-        // 1. INSTANT LOCAL CACHE LOAD (<2ms response for zero loading lag)
-        String cachedJson = userStore.getCachedEmployeeDetail(year, month);
-        if (cachedJson != null && !cachedJson.trim().isEmpty()) {
-            try {
-                JSONObject cachedObj = new JSONObject(cachedJson);
-                parseAndApplyEmployeeDetail(cachedObj);
-            } catch (Exception ignored) {}
-        }
-
-        // 2. BACKGROUND SERVER SYNC (Seamless background refresh)
-        Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.YEAR, year);
-        cal.set(Calendar.MONTH, month);
-        cal.set(Calendar.DAY_OF_MONTH, 1);
-        int maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH);
-
-        String fromStr = String.format(Locale.US, "%04d-%02d-01", year, month + 1);
-        String toStr = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, maxDays);
-
-        Map<String, String> params = new HashMap<>();
-        int staffId = userStore.getStaffId();
-        params.put("staffid", String.valueOf(staffId > 0 ? staffId : 38));
-        params.put("from", fromStr);
-        params.put("to", toStr);
-
-        ApiClient.postRequest(ApiConfig.EMPLOYEE_DETAIL_URL, params, new ApiClient.ApiCallback() {
-            @Override
-            public void onSuccess(JSONObject response) {
-                if (!isAdded()) return;
-                userStore.cacheEmployeeDetail(year, month, response.toString());
-                parseAndApplyEmployeeDetail(response);
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                if (!isAdded()) return;
-                Log.e("ManageAttendance", "API Error: " + errorMessage);
-            }
-        });
-    }
-
     private void parseAndApplyEmployeeDetail(JSONObject response) {
-        if (response == null) return;
+        if (response == null || !isAdded()) return;
         try {
             boolean success = response.optBoolean("success", false);
             if (!success) return;
+
+            UserLocalStore userStore = viewModel.getUserStore();
 
             // 1. Employee Profile Header
             JSONObject empObj = response.optJSONObject("employee");
@@ -324,7 +306,7 @@ public class ManageAttendanceFragment extends Fragment {
             updateCalendarStatusesFromApi();
 
             // 8. Refresh detail sheet for current selected day
-            int selected = bigCalendarView != null ? bigCalendarView.getSelectedDay() : Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
+            int selected = bigCalendarView != null ? bigCalendarView.getSelectedDay() : viewModel.getSelectedDayValue();
             BigMonthlyCalendarView.DayStatus status = bigCalendarView != null ?
                     bigCalendarView.getSelectedDayStatus() : BigMonthlyCalendarView.DayStatus.FUTURE;
             updateSelectedDayDetail(selected, status);
@@ -336,9 +318,12 @@ public class ManageAttendanceFragment extends Fragment {
     private void updateCalendarStatusesFromApi() {
         if (bigCalendarView == null) return;
 
+        int year = viewModel.getCurrentYearValue();
+        int month = viewModel.getCurrentMonthValue();
+
         Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.YEAR, currentYear);
-        cal.set(Calendar.MONTH, currentMonth);
+        cal.set(Calendar.YEAR, year);
+        cal.set(Calendar.MONTH, month);
         int maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH);
 
         Map<Integer, BigMonthlyCalendarView.DayStatus> statusMap = new HashMap<>();
@@ -377,15 +362,19 @@ public class ManageAttendanceFragment extends Fragment {
     private void setupCalendarInteractivity() {
         if (bigCalendarView != null) {
             bigCalendarView.setOnDateSelectedListener((day, month, year, status) -> {
+                viewModel.setSelectedDay(day);
                 updateSelectedDayDetail(day, status);
             });
         }
     }
 
     private void updateSelectedDayDetail(int day, BigMonthlyCalendarView.DayStatus status) {
-        String monthName = new DateFormatSymbols(Locale.US).getMonths()[currentMonth];
+        int year = viewModel.getCurrentYearValue();
+        int month = viewModel.getCurrentMonthValue();
+
+        String monthName = new DateFormatSymbols(Locale.US).getMonths()[month];
         if (tvSelectedDateTitle != null) {
-            tvSelectedDateTitle.setText(monthName + " " + day + ", " + currentYear);
+            tvSelectedDateTitle.setText(monthName + " " + day + ", " + year);
         }
 
         if (tvSelectedStatusBadge == null) return;
@@ -446,7 +435,7 @@ public class ManageAttendanceFragment extends Fragment {
                 tvSelectedTag.setTextColor(Color.parseColor("#7E22CE"));
             }
         } else {
-            renderDefaultDayDetail(day, status);
+            renderDefaultDayDetail(day, status, year, month);
         }
 
         // 2. Update Permission Detail Card below Attendance Card
@@ -492,10 +481,10 @@ public class ManageAttendanceFragment extends Fragment {
         }
     }
 
-    private void renderDefaultDayDetail(int day, BigMonthlyCalendarView.DayStatus status) {
+    private void renderDefaultDayDetail(int day, BigMonthlyCalendarView.DayStatus status, int year, int month) {
         Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.YEAR, currentYear);
-        cal.set(Calendar.MONTH, currentMonth);
+        cal.set(Calendar.YEAR, year);
+        cal.set(Calendar.MONTH, month);
         cal.set(Calendar.DAY_OF_MONTH, day);
 
         if (status == BigMonthlyCalendarView.DayStatus.OFF_DAY || cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
@@ -526,16 +515,15 @@ public class ManageAttendanceFragment extends Fragment {
     }
 
     private void showMonthFilterDialog() {
-        PremiumAlertDialog.showMonthPicker(requireContext(), currentYear, currentMonth, which -> {
-            currentMonth = which; // 0..11
+        int year = viewModel.getCurrentYearValue();
+        int month = viewModel.getCurrentMonthValue();
 
+        PremiumAlertDialog.showMonthPicker(requireContext(), year, month, which -> {
             if (bigCalendarView != null) {
-                bigCalendarView.setYearMonth(currentYear, currentMonth);
+                bigCalendarView.setYearMonth(year, which);
                 bigCalendarView.setSelectedDay(1);
             }
-
-            updateMonthTitle();
-            fetchEmployeeDetailFromApi(currentYear, currentMonth);
+            viewModel.setYearMonth(year, which);
         });
     }
 
@@ -569,7 +557,9 @@ public class ManageAttendanceFragment extends Fragment {
     }
 
     private void showNotifications() {
-        String monthName = new DateFormatSymbols(Locale.US).getMonths()[currentMonth];
-        PremiumAlertDialog.showNotifications(requireContext(), permissionMap.values(), holidayMap.values(), monthName, currentYear);
+        int year = viewModel.getCurrentYearValue();
+        int month = viewModel.getCurrentMonthValue();
+        String monthName = new DateFormatSymbols(Locale.US).getMonths()[month];
+        PremiumAlertDialog.showNotifications(requireContext(), permissionMap.values(), holidayMap.values(), monthName, year);
     }
 }

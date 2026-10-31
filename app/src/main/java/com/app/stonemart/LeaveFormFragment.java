@@ -2,8 +2,6 @@ package com.app.stonemart;
 
 import android.app.DatePickerDialog;
 import android.app.Dialog;
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -28,30 +26,31 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.transition.AutoTransition;
 import androidx.transition.TransitionManager;
 
+import com.app.stonemart.core.Resource;
+import com.app.stonemart.viewmodel.LeaveFormViewModel;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
+/**
+ * LeaveFormFragment - MVVM View for leave applications.
+ * Observes LeaveFormViewModel for categories, half-day toggling, validation, and submission states.
+ */
 public class LeaveFormFragment extends Fragment {
 
-    private static final String PREF_RECENT_LEAVES = "StoneMart_Recent_Leaves";
-    private static final String KEY_LEAVES_JSON = "saved_leaves_list";
     private final SimpleDateFormat apiDateFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+
+    private LeaveFormViewModel viewModel;
 
     // Profile Views
     private TextView tvAvatarInitials, tvEmpGreeting, tvEmpDetails;
@@ -67,13 +66,12 @@ public class LeaveFormFragment extends Fragment {
     private ImageView ivChevronLeave;
     private Spinner spLeaveType;
     private final List<LeaveTypeItem> leaveTypesList = new ArrayList<>();
-    private LeaveTypeItem currentLeaveType;
+    private LeaveTypeAdapter spinnerAdapter;
 
     // Request Type Segment (Full Day vs Half Day)
     private FrameLayout containerDurationToggle;
     private View vDurationSlider;
     private TextView btnTypeFullDay, btnTypeHalfDay;
-    private boolean isHalfDay = false;
 
     // Full Day Date Layout
     private LinearLayout layoutFullDayDates;
@@ -86,7 +84,6 @@ public class LeaveFormFragment extends Fragment {
     private FrameLayout containerSessionToggle;
     private View vSessionSlider;
     private TextView btnSessionAM, btnSessionPM;
-    private String currentSession = "AM"; // "AM" or "PM"
 
     // Reason & Quick Suggestions
     private EditText etReason;
@@ -101,14 +98,12 @@ public class LeaveFormFragment extends Fragment {
     private TextView tvRecentCount;
     private LinearLayout layoutRecentLeaves;
 
-    private UserLocalStore userStore;
-
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_leave_form, container, false);
-        userStore = new UserLocalStore(requireContext());
+        viewModel = new ViewModelProvider(this).get(LeaveFormViewModel.class);
 
         initViews(view);
         setupEmployeeHeader();
@@ -117,7 +112,7 @@ public class LeaveFormFragment extends Fragment {
         setupDatePickers();
         setupQuickChips();
         setupSubmitButton();
-        loadRecentLeaveApplications();
+        setupObservers();
 
         return view;
     }
@@ -158,12 +153,12 @@ public class LeaveFormFragment extends Fragment {
         btnSessionAM = view.findViewById(R.id.btnSessionAM);
         btnSessionPM = view.findViewById(R.id.btnSessionPM);
 
+        etReason = view.findViewById(R.id.etReason);
         chipReasonFamily = view.findViewById(R.id.chipReasonFamily);
         chipReasonMedical = view.findViewById(R.id.chipReasonMedical);
         chipReasonPersonal = view.findViewById(R.id.chipReasonPersonal);
         chipReasonFever = view.findViewById(R.id.chipReasonFever);
         chipReasonEmergency = view.findViewById(R.id.chipReasonEmergency);
-        etReason = view.findViewById(R.id.etReason);
 
         tvErrorMessage = view.findViewById(R.id.tvErrorMessage);
         btnSubmitLeave = view.findViewById(R.id.btnSubmitLeave);
@@ -173,16 +168,82 @@ public class LeaveFormFragment extends Fragment {
         layoutRecentLeaves = view.findViewById(R.id.layoutRecentLeaves);
     }
 
+    private void setupObservers() {
+        viewModel.leaveTypes.observe(getViewLifecycleOwner(), types -> {
+            if (types == null) return;
+            leaveTypesList.clear();
+            leaveTypesList.addAll(types);
+            if (spinnerAdapter != null) {
+                spinnerAdapter.notifyDataSetChanged();
+            }
+        });
+
+        viewModel.selectedLeaveType.observe(getViewLifecycleOwner(), item -> {
+            if (item == null) return;
+            updateSelectedLeaveTypeUI(item);
+            onLeaveTypeChanged(item);
+        });
+
+        viewModel.isHalfDay.observe(getViewLifecycleOwner(), halfDay -> {
+            if (halfDay == null) return;
+            if (halfDay) {
+                applyHalfDayUI(true);
+            } else {
+                applyFullDayUI(true);
+            }
+        });
+
+        viewModel.halfDaySession.observe(getViewLifecycleOwner(), session -> {
+            if (session == null) return;
+            applySessionUI(session, true);
+        });
+
+        viewModel.submitResult.observe(getViewLifecycleOwner(), resource -> {
+            if (resource == null) return;
+            switch (resource.getStatus()) {
+                case LOADING:
+                    setSubmittingState(true);
+                    break;
+                case SUCCESS:
+                    setSubmittingState(false);
+                    if (resource.getData() != null) {
+                        showSuccessDialog(resource.getData());
+                    }
+                    etReason.setText("");
+                    break;
+                case ERROR:
+                    setSubmittingState(false);
+                    showError(resource.getMessage() != null ? resource.getMessage() : "Failed to submit leave application.");
+                    break;
+            }
+        });
+
+        viewModel.recentLeaves.observe(getViewLifecycleOwner(), leaves -> {
+            if (leaves != null) {
+                renderRecentLeaveCards(leaves);
+            }
+        });
+    }
+
     private void setupEmployeeHeader() {
+        UserLocalStore userStore = viewModel.getUserStore();
         String empName = userStore.getEmpName();
-        int staffId = userStore.getStaffId();
-        if (staffId <= 0) staffId = 38;
+        if (empName == null || empName.trim().isEmpty()) {
+            empName = "Arthi T";
+        }
 
-        tvEmpGreeting.setText("Hi, " + empName);
-        tvEmpDetails.setText("Staff ID: #" + staffId + " • Dept #12 • " + userStore.getUserRole().toUpperCase());
+        if (tvEmpGreeting != null) {
+            tvEmpGreeting.setText("Hi, " + empName);
+        }
 
-        if (!TextUtils.isEmpty(empName)) {
-            String[] parts = empName.trim().split(" ");
+        if (tvEmpDetails != null) {
+            int staffId = userStore.getStaffId();
+            String storeName = userStore.getStoreName();
+            tvEmpDetails.setText("Employee ID: #" + (staffId > 0 ? staffId : 38) + " • " + (storeName != null ? storeName : "Stone Mart Yard"));
+        }
+
+        if (tvAvatarInitials != null) {
+            String[] parts = empName.split(" ");
             if (parts.length >= 2 && parts[1].length() > 0) {
                 tvAvatarInitials.setText(("" + parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase());
             } else {
@@ -191,96 +252,44 @@ public class LeaveFormFragment extends Fragment {
         }
 
         if (tvEmployeeTenureBadge != null) {
-            tvEmployeeTenureBadge.setText("CONFIRMED (>6M)");
-            tvEmployeeTenureBadge.setTextColor(Color.WHITE);
+            tvEmployeeTenureBadge.setText("Permanent Staff (2+ Years)");
         }
-        if (tvQuotaMonthlyAccrual != null) tvQuotaMonthlyAccrual.setText("2.0");
-        if (tvQuotaPrevRollOver != null) tvQuotaPrevRollOver.setText("2.0");
-        if (tvQuotaTotalJoint != null) tvQuotaTotalJoint.setText("4.0");
+        if (tvQuotaMonthlyAccrual != null) {
+            tvQuotaMonthlyAccrual.setText("2.0");
+        }
+        if (tvQuotaPrevRollOver != null) {
+            tvQuotaPrevRollOver.setText("2.0");
+        }
+        if (tvQuotaTotalJoint != null) {
+            tvQuotaTotalJoint.setText("4.0");
+        }
         if (tvLeavePolicySummary != null) {
             tvLeavePolicySummary.setText("✓ 2 paid leaves credited monthly. Leaves accumulate flexibly in employee favor with no joint total limit for single or consecutive requests.");
         }
     }
 
     private void setupLeaveTypes() {
-        leaveTypesList.clear();
-
-        // 1. CL: Casual Leave (Standard active leave)
-        leaveTypesList.add(new LeaveTypeItem(
-                3, "CL", "Casual Leave (CL)",
-                "Paid Casual Leave",
-                "PAID", true, true, true,
-                "Paid casual leave for personal absence."
-        ));
-
-        // 2. SL: Sick / Medical Leave
-        leaveTypesList.add(new LeaveTypeItem(
-                2, "SL", "Sick / Medical Leave (SL)",
-                "Medical & Doctor Consultation",
-                "PAID", true, true, true,
-                "Paid sick leave for medical and doctor visits."
-        ));
-
-        // 3. EL: Earned / Privilege Leave
-        leaveTypesList.add(new LeaveTypeItem(
-                1, "EL", "Earned / Privilege Leave (EL)",
-                "Monthly Accrued Leave",
-                "PAID", true, true, true,
-                "Accrued paid leave based on monthly tenure."
-        ));
-
-        // 4. LOP: Loss of Pay
-        leaveTypesList.add(new LeaveTypeItem(
-                6, "LOP", "Loss of Pay (LOP)",
-                "Emergency Leave • Salary Deducted",
-                "UNPAID", false, true, false,
-                "Unpaid emergency absence or probation leave calculated on salary."
-        ));
-
-        // 5. PERSONAL: Personal Leave
-        leaveTypesList.add(new LeaveTypeItem(
-                4, "PERSONAL", "Personal Leave",
-                "Urgent Personal Absence",
-                "PAID", true, true, false,
-                "Personal urgent category leave."
-        ));
-
-        // 6. LL: Long Leave
-        leaveTypesList.add(new LeaveTypeItem(
-                5, "LL", "Special / Long Leave (LL)",
-                "Extended Absence • HR Approval",
-                "UNPAID", false, false, false,
-                "Extended leave policy requiring senior HR approval."
-        ));
-
-        // Adapter for compatibility
-        LeaveTypeAdapter adapter = new LeaveTypeAdapter(requireContext(), leaveTypesList);
-        spLeaveType.setAdapter(adapter);
+        spinnerAdapter = new LeaveTypeAdapter(requireContext(), leaveTypesList);
+        spLeaveType.setAdapter(spinnerAdapter);
 
         spLeaveType.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                currentLeaveType = leaveTypesList.get(position);
-                updateSelectedLeaveTypeUI(currentLeaveType);
-                onLeaveTypeChanged(currentLeaveType);
+                if (position >= 0 && position < leaveTypesList.size()) {
+                    viewModel.selectLeaveType(leaveTypesList.get(position));
+                }
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        // Set up interactive custom selector card
         layoutLeaveTypeSelector.setOnClickListener(v -> {
             ivChevronLeave.animate().rotation(180f).setDuration(150).withEndAction(() -> {
                 showLeaveTypeBottomSheet();
                 ivChevronLeave.animate().rotation(0f).setDuration(200).start();
             }).start();
         });
-
-        // Initial default selection
-        currentLeaveType = leaveTypesList.get(0);
-        updateSelectedLeaveTypeUI(currentLeaveType);
-        onLeaveTypeChanged(currentLeaveType);
     }
 
     private void updateSelectedLeaveTypeUI(LeaveTypeItem item) {
@@ -307,7 +316,6 @@ public class LeaveFormFragment extends Fragment {
         View sheetView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_bottom_sheet_leave_type, null);
         dialog.setContentView(sheetView);
 
-        // Make background container transparent for clean rounded top corners
         View bottomSheetInternal = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
         if (bottomSheetInternal != null) {
             bottomSheetInternal.setBackground(new ColorDrawable(Color.TRANSPARENT));
@@ -321,6 +329,8 @@ public class LeaveFormFragment extends Fragment {
         LinearLayout layoutModalList = sheetView.findViewById(R.id.layoutModalLeaveList);
         layoutModalList.removeAllViews();
         LayoutInflater inflater = LayoutInflater.from(requireContext());
+
+        LeaveTypeItem currentSelected = viewModel.selectedLeaveType.getValue();
 
         for (LeaveTypeItem item : leaveTypesList) {
             View itemView = inflater.inflate(R.layout.item_leave_type_modal, layoutModalList, false);
@@ -347,7 +357,7 @@ public class LeaveFormFragment extends Fragment {
                 tvBadge.setTextColor(0xFFDC2626);
             }
 
-            boolean isSelected = currentLeaveType != null && currentLeaveType.getId() == item.getId();
+            boolean isSelected = currentSelected != null && currentSelected.getId() == item.getId();
             if (isSelected) {
                 itemView.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_leave_modal_item_selected));
                 ivCheck.setVisibility(View.VISIBLE);
@@ -357,15 +367,13 @@ public class LeaveFormFragment extends Fragment {
             }
 
             itemView.setOnClickListener(v -> {
-                currentLeaveType = item;
-                updateSelectedLeaveTypeUI(item);
-                onLeaveTypeChanged(item);
-
-                int idx = leaveTypesList.indexOf(item);
-                if (idx >= 0 && spLeaveType != null) {
-                    spLeaveType.setSelection(idx);
+                viewModel.selectLeaveType(item);
+                for (int i = 0; i < leaveTypesList.size(); i++) {
+                    if (leaveTypesList.get(i).getId() == item.getId()) {
+                        spLeaveType.setSelection(i);
+                        break;
+                    }
                 }
-
                 dialog.dismiss();
             });
 
@@ -377,17 +385,17 @@ public class LeaveFormFragment extends Fragment {
 
     private void onLeaveTypeChanged(LeaveTypeItem item) {
         if (item == null) return;
-
-        if (item.isHalfDayAllowed()) {
-            btnTypeHalfDay.setEnabled(true);
-            btnTypeHalfDay.setAlpha(1.0f);
-        } else {
-            if (isHalfDay) {
-                switchToFullDay(true);
+        if (!item.isHalfDayAllowed()) {
+            btnTypeHalfDay.setAlpha(0.35f);
+            btnTypeHalfDay.setClickable(false);
+            if (Boolean.TRUE.equals(viewModel.isHalfDay.getValue())) {
+                viewModel.setHalfDay(false);
             }
-            btnTypeHalfDay.setEnabled(false);
-            btnTypeHalfDay.setAlpha(0.40f);
+        } else {
+            btnTypeHalfDay.setAlpha(1.0f);
+            btnTypeHalfDay.setClickable(true);
         }
+        updateFullDaysCalculation();
     }
 
     private void setupRequestTypeToggle() {
@@ -399,37 +407,36 @@ public class LeaveFormFragment extends Fragment {
             lp.width = thumbWidth;
             vDurationSlider.setLayoutParams(lp);
 
-            if (isHalfDay) {
+            if (Boolean.TRUE.equals(viewModel.isHalfDay.getValue())) {
                 vDurationSlider.setTranslationX(thumbWidth);
+                btnTypeHalfDay.setTextColor(Color.WHITE);
+                btnTypeFullDay.setTextColor(0xFF475569);
             } else {
                 vDurationSlider.setTranslationX(0);
+                btnTypeFullDay.setTextColor(Color.WHITE);
+                btnTypeHalfDay.setTextColor(0xFF475569);
             }
         });
 
-        btnTypeFullDay.setOnClickListener(v -> {
-            if (isHalfDay) {
-                switchToFullDay(true);
-            }
-        });
-
+        btnTypeFullDay.setOnClickListener(v -> viewModel.setHalfDay(false));
         btnTypeHalfDay.setOnClickListener(v -> {
-            if (currentLeaveType != null && !currentLeaveType.isHalfDayAllowed()) {
-                Toast.makeText(requireContext(), currentLeaveType.getName() + " does not permit half-day requests.", Toast.LENGTH_SHORT).show();
+            LeaveTypeItem cur = viewModel.selectedLeaveType.getValue();
+            if (cur != null && !cur.isHalfDayAllowed()) {
+                Toast.makeText(requireContext(), cur.getName() + " does not permit Half Day requests.", Toast.LENGTH_SHORT).show();
                 return;
             }
-            if (!isHalfDay) {
-                switchToHalfDay(true);
-            }
+            viewModel.setHalfDay(true);
         });
 
-        containerSessionToggle.post(this::setupSessionSliderPosition);
-
-        btnSessionAM.setOnClickListener(v -> setHalfDaySession("AM", true));
-        btnSessionPM.setOnClickListener(v -> setHalfDaySession("PM", true));
+        btnSessionAM.setOnClickListener(v -> viewModel.setHalfDaySession("AM"));
+        btnSessionPM.setOnClickListener(v -> viewModel.setHalfDaySession("PM"));
     }
 
-    private void switchToFullDay(boolean animate) {
-        isHalfDay = false;
+    private void applyFullDayUI(boolean animate) {
+        int thumbWidth = vDurationSlider.getWidth();
+        if (thumbWidth <= 0) {
+            thumbWidth = (containerDurationToggle.getWidth() - containerDurationToggle.getPaddingLeft() - containerDurationToggle.getPaddingRight()) / 2;
+        }
 
         if (animate) {
             vDurationSlider.animate()
@@ -460,9 +467,7 @@ public class LeaveFormFragment extends Fragment {
         updateFullDaysCalculation();
     }
 
-    private void switchToHalfDay(boolean animate) {
-        isHalfDay = true;
-
+    private void applyHalfDayUI(boolean animate) {
         int thumbWidth = vDurationSlider.getWidth();
         if (thumbWidth <= 0) {
             thumbWidth = (containerDurationToggle.getWidth() - containerDurationToggle.getPaddingLeft() - containerDurationToggle.getPaddingRight()) / 2;
@@ -511,7 +516,8 @@ public class LeaveFormFragment extends Fragment {
         lp.width = thumbWidth;
         vSessionSlider.setLayoutParams(lp);
 
-        if ("PM".equalsIgnoreCase(currentSession)) {
+        String session = viewModel.halfDaySession.getValue();
+        if ("PM".equalsIgnoreCase(session)) {
             vSessionSlider.setTranslationX(thumbWidth);
             btnSessionPM.setTextColor(Color.WHITE);
             btnSessionAM.setTextColor(0xFF475569);
@@ -522,8 +528,7 @@ public class LeaveFormFragment extends Fragment {
         }
     }
 
-    private void setHalfDaySession(String session, boolean animate) {
-        currentSession = session;
+    private void applySessionUI(String session, boolean animate) {
         int thumbWidth = vSessionSlider.getWidth();
         if (thumbWidth <= 0) {
             thumbWidth = (containerSessionToggle.getWidth() - containerSessionToggle.getPaddingLeft() - containerSessionToggle.getPaddingRight()) / 2;
@@ -619,7 +624,8 @@ public class LeaveFormFragment extends Fragment {
     }
 
     private void updateFullDaysCalculation() {
-        if (isHalfDay) {
+        Boolean halfDay = viewModel != null ? viewModel.isHalfDay.getValue() : false;
+        if (Boolean.TRUE.equals(halfDay)) {
             tvFullDaysCalculation.setText("✓ Estimated: 0.5 Day • Covered by accumulated leave balance");
             tvFullDaysCalculation.setTextColor(0xFF16A34A);
             return;
@@ -674,122 +680,12 @@ public class LeaveFormFragment extends Fragment {
     private void submitLeaveApplication() {
         tvErrorMessage.setVisibility(View.GONE);
 
-        int staffId = userStore.getStaffId();
-        if (staffId <= 0) staffId = 38;
-
-        if (currentLeaveType == null) {
-            showError("Please select a valid leave category.");
-            return;
-        }
-
-        String fromDate;
-        String toDate;
-        String requestType;
-        String halfDaySession = null;
-
-        if (isHalfDay) {
-            fromDate = etHalfDate.getText().toString().trim();
-            toDate = fromDate;
-            requestType = "HALF_DAY";
-            halfDaySession = currentSession;
-
-            if (TextUtils.isEmpty(fromDate)) {
-                showError("Please select the leave date.");
-                return;
-            }
-        } else {
-            fromDate = etFromDate.getText().toString().trim();
-            toDate = etToDate.getText().toString().trim();
-            requestType = "FULL_DAY";
-
-            if (TextUtils.isEmpty(fromDate) || TextUtils.isEmpty(toDate)) {
-                showError("Please select valid From and To dates.");
-                return;
-            }
-
-            if (toDate.compareTo(fromDate) < 0) {
-                showError("End date cannot be earlier than start date.");
-                return;
-            }
-        }
-
+        boolean halfDay = Boolean.TRUE.equals(viewModel.isHalfDay.getValue());
+        String fromDate = halfDay ? etHalfDate.getText().toString().trim() : etFromDate.getText().toString().trim();
+        String toDate = halfDay ? fromDate : etToDate.getText().toString().trim();
         String reason = etReason.getText().toString().trim();
-        if (TextUtils.isEmpty(reason) || reason.length() < 3) {
-            showError("Please enter your reason for leave (minimum 3 characters).");
-            return;
-        }
 
-        // Show Loading State
-        setSubmittingState(true);
-
-        Map<String, String> params = new HashMap<>();
-        params.put("staffid", String.valueOf(staffId));
-        params.put("leave_type_id", String.valueOf(currentLeaveType.getId()));
-        params.put("leave_code", currentLeaveType.getCode());
-        params.put("request_type", requestType);
-        params.put("from_date", fromDate);
-        params.put("to_date", toDate);
-        params.put("reason", reason);
-        if (isHalfDay && halfDaySession != null) {
-            params.put("half_day_session", halfDaySession);
-        }
-
-        final int finalStaffId = staffId;
-        final String finalFromDate = fromDate;
-        final String finalToDate = toDate;
-        final String finalRequestType = requestType;
-        final String finalHalfDaySession = halfDaySession;
-        final String finalReason = reason;
-        final LeaveTypeItem finalLeaveType = currentLeaveType;
-        final boolean finalIsHalfDay = isHalfDay;
-
-        ApiClient.postRequest(ApiConfig.LEAVE_REQUEST_URL, params, new ApiClient.ApiCallback() {
-            @Override
-            public void onSuccess(JSONObject json) {
-                if (!isAdded()) return;
-                setSubmittingState(false);
-                if (json != null && json.optBoolean("status", false)) {
-                    JSONObject data = json.optJSONObject("data");
-                    int reqId = (data != null && data.has("id")) ? data.optInt("id") : (int) (System.currentTimeMillis() % 10000);
-                    String status = (data != null && data.has("status")) ? data.optString("status") : "PENDING_HEAD";
-                    double requestedDays = (data != null && data.has("requested_days")) ? data.optDouble("requested_days") : (finalIsHalfDay ? 0.5 : 1.0);
-                    int headId = (data != null && data.has("head_employee_id")) ? data.optInt("head_employee_id") : 3;
-
-                    LeaveRequestRecord record = new LeaveRequestRecord(
-                            reqId, finalStaffId, 12, finalLeaveType.getId(),
-                            finalLeaveType.getCode(), finalRequestType, finalFromDate, finalToDate,
-                            finalHalfDaySession, requestedDays, finalReason, headId,
-                            status, "MOBILE_APP", "4.0"
-                    );
-
-                    saveLeaveRequestLocally(record);
-                    loadRecentLeaveApplications();
-                    showSuccessDialog(record);
-                    etReason.setText("");
-                } else {
-                    String msg = json != null ? json.optString("message", "Leave application submission failed.") : "Submission failed.";
-                    showError(msg);
-                }
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                if (!isAdded()) return;
-                setSubmittingState(false);
-                // Local fallback simulation on offline/network error
-                int simId = (int) (System.currentTimeMillis() % 10000);
-                LeaveRequestRecord simulated = new LeaveRequestRecord(
-                        simId, finalStaffId, 12, finalLeaveType.getId(),
-                        finalLeaveType.getCode(), finalRequestType, finalFromDate, finalToDate,
-                        finalHalfDaySession, (finalIsHalfDay ? 0.5 : 1.0), finalReason, 3,
-                        "PENDING_HEAD", "MOBILE_APP", "4.0"
-                );
-                saveLeaveRequestLocally(simulated);
-                loadRecentLeaveApplications();
-                showSuccessDialog(simulated);
-                etReason.setText("");
-            }
-        });
+        viewModel.submitLeave(fromDate, toDate, reason);
     }
 
     private void setSubmittingState(boolean isSubmitting) {
@@ -846,64 +742,12 @@ public class LeaveFormFragment extends Fragment {
         return "Leave";
     }
 
-    private void saveLeaveRequestLocally(LeaveRequestRecord record) {
-        SharedPreferences prefs = requireContext().getSharedPreferences(PREF_RECENT_LEAVES, Context.MODE_PRIVATE);
-        String existingJson = prefs.getString(KEY_LEAVES_JSON, "[]");
-        try {
-            JSONArray arr = new JSONArray(existingJson);
-            JSONArray updated = new JSONArray();
-            updated.put(record.toJson());
-            for (int i = 0; i < arr.length() && i < 15; i++) {
-                updated.put(arr.getJSONObject(i));
-            }
-            prefs.edit().putString(KEY_LEAVES_JSON, updated.toString()).apply();
-        } catch (JSONException ignored) {}
-    }
-
-    private void loadRecentLeaveApplications() {
+    private void renderRecentLeaveCards(List<LeaveRequestRecord> leaves) {
         layoutRecentLeaves.removeAllViews();
-        SharedPreferences prefs = requireContext().getSharedPreferences(PREF_RECENT_LEAVES, Context.MODE_PRIVATE);
-        String json = prefs.getString(KEY_LEAVES_JSON, "");
-
-        JSONArray arr = null;
-        if (!TextUtils.isEmpty(json)) {
-            try {
-                arr = new JSONArray(json);
-            } catch (JSONException ignored) {}
-        }
-
-        if (arr == null || arr.length() == 0) {
-            arr = new JSONArray();
-            JSONObject sample = new JSONObject();
-            try {
-                sample.put("id", 6);
-                sample.put("employee_id", 38);
-                sample.put("department_id", 12);
-                sample.put("leave_type_id", 3);
-                sample.put("leave_code", "CL");
-                sample.put("request_type", "FULL_DAY");
-                sample.put("from_date", "2026-10-14");
-                sample.put("to_date", "2026-10-15");
-                sample.put("half_day_session", null);
-                sample.put("requested_days", 2.0);
-                sample.put("reason", "Personal absence");
-                sample.put("head_employee_id", 3);
-                sample.put("status", "PENDING_HEAD");
-                sample.put("source_type", "MOBILE_APP");
-                sample.put("available_before", "4.0");
-                arr.put(sample);
-            } catch (JSONException ignored) {}
-        }
-
         LayoutInflater inflater = LayoutInflater.from(requireContext());
-        tvRecentCount.setText(arr.length() + " Request" + (arr.length() > 1 ? "s" : ""));
+        tvRecentCount.setText(leaves.size() + " Request" + (leaves.size() > 1 ? "s" : ""));
 
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject obj = arr.optJSONObject(i);
-            if (obj == null) continue;
-            LeaveRequestRecord r = LeaveRequestRecord.fromJson(obj);
-            if (r == null) continue;
-
+        for (LeaveRequestRecord r : leaves) {
             View card = inflater.inflate(R.layout.item_recent_leave, layoutRecentLeaves, false);
             TextView tvCode = card.findViewById(R.id.tvRecentCode);
             TextView tvId = card.findViewById(R.id.tvRecentId);

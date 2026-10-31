@@ -13,21 +13,28 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.lifecycle.ViewModelProvider;
+
+import com.app.stonemart.core.Resource;
+import com.app.stonemart.viewmodel.LoginViewModel;
 import com.app.stonemart.widget.CyberPillButton;
 import com.app.stonemart.widget.PremiumAlertDialog;
 
-import org.json.JSONObject;
-
-import java.util.HashMap;
-import java.util.Map;
-
+/**
+ * EmployeeLoginActivity - MVVM View for user authentication.
+ * Observes LoginViewModel and updates UI reactively.
+ */
 public class EmployeeLoginActivity extends AppCompatActivity {
-    private UserLocalStore userStore;
+
+    private LoginViewModel loginViewModel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_employee_login);
+
+        // Initialize ViewModel
+        loginViewModel = new ViewModelProvider(this).get(LoginViewModel.class);
 
         ScrollView scrollViewLogin = findViewById(R.id.scrollViewLogin);
         View cardLoginContainer = findViewById(R.id.cardLoginContainer);
@@ -51,7 +58,6 @@ public class EmployeeLoginActivity extends AppCompatActivity {
             });
         }
 
-        userStore = new UserLocalStore(this);
         EditText etEmpId = findViewById(R.id.etEmpId);
         EditText etPassword = findViewById(R.id.etPassword);
         ImageView ivTogglePassword = findViewById(R.id.ivTogglePassword);
@@ -103,6 +109,31 @@ public class EmployeeLoginActivity extends AppCompatActivity {
         etEmpId.setText("");
         etPassword.setText("");
 
+        // Observe ViewModel LiveData State
+        loginViewModel.loginState.observe(this, resource -> {
+            if (resource == null) return;
+            switch (resource.getStatus()) {
+                case LOADING:
+                    btnLogin.setEnabled(false);
+                    btnLogin.setText("AUTHENTICATING...");
+                    break;
+                case SUCCESS:
+                    btnLogin.setEnabled(true);
+                    btnLogin.setText("Log In");
+                    String name = resource.getData() != null ? resource.getData() : "Employee";
+                    Toast.makeText(EmployeeLoginActivity.this, "Welcome, " + name + "!",
+                            Toast.LENGTH_SHORT).show();
+                    startActivity(new Intent(EmployeeLoginActivity.this, DashboardActivity.class));
+                    finish();
+                    break;
+                case ERROR:
+                    btnLogin.setEnabled(true);
+                    btnLogin.setText("Log In");
+                    showErrorAlert("Authentication Failed", resource.getMessage() != null ? resource.getMessage() : "Unable to log in. Please check credentials.");
+                    break;
+            }
+        });
+
         btnLogin.setOnClickListener(v -> {
             String empId = etEmpId.getText().toString().trim();
             String password = etPassword.getText().toString().trim();
@@ -112,64 +143,8 @@ public class EmployeeLoginActivity extends AppCompatActivity {
                 return;
             }
 
-            // Set button loading state dynamically
-            btnLogin.setEnabled(false);
-            btnLogin.setText("AUTHENTICATING...");
-
-            Map<String, String> params = new HashMap<>();
-            params.put("id", empId);
-            params.put("pwd", password);
-
-            ApiClient.postRequest(ApiConfig.LOGIN_URL, params, new ApiClient.ApiCallback() {
-                @Override
-                public void onSuccess(JSONObject response) {
-                    try {
-                        boolean success = response.optBoolean("success", false);
-                        if (success) {
-                            JSONObject userObj = response.optJSONObject("user");
-                            int userId = userObj != null ? userObj.optInt("id", 0) : 0;
-                            String username = userObj != null ? userObj.optString("username", empId) : empId;
-                            int staffId = userObj != null ? userObj.optInt("staffid", 0) : 0;
-                            String userRole = userObj != null ? userObj.optString("userrole", "employee") : "employee";
-                            String email = userObj != null ? userObj.optString("email", "") : "";
-
-                            String formattedName = username.length() > 0
-                                    ? username.substring(0, 1).toUpperCase() + username.substring(1)
-                                    : empId;
-                            String storeName = "Plot 12 • Heavy Sawn Slab Yard (Sector 4B)";
-
-                            userStore.storeUserSession(String.valueOf(userId > 0 ? userId : empId), formattedName,
-                                    storeName, 26.9124, 75.7873, 200.0f, staffId, userRole, email);
-
-                            Toast.makeText(EmployeeLoginActivity.this, "Welcome, " + formattedName + "!",
-                                    Toast.LENGTH_SHORT).show();
-                            startActivity(new Intent(EmployeeLoginActivity.this, DashboardActivity.class));
-                            finish();
-                        } else {
-                            resetLoginButton(btnLogin);
-                            String msg = response.optString("message", "Invalid Username or Password. Please verify your credentials and try again.");
-                            showErrorAlert("Authentication Failed", msg);
-                        }
-                    } catch (Exception e) {
-                        resetLoginButton(btnLogin);
-                        showErrorAlert("Response Error", "Unable to parse server response. Please try again.");
-                    }
-                }
-
-                @Override
-                public void onError(String errorMessage) {
-                    resetLoginButton(btnLogin);
-                    showErrorAlert("Connection Error", "Unable to connect to Stone Mart server (" + errorMessage + "). Please check your network connection and try again.");
-                }
-            });
+            loginViewModel.login(empId, password);
         });
-    }
-
-    private void resetLoginButton(CyberPillButton btnLogin) {
-        if (btnLogin != null) {
-            btnLogin.setEnabled(true);
-            btnLogin.setText("Log In");
-        }
     }
 
     private void showErrorAlert(String title, String message) {
