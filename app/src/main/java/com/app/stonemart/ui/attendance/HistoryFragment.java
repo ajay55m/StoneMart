@@ -11,3 +11,4 @@ public class HistoryFragment extends ManageAttendanceFragment {
         return new HistoryFragment();
     }
 }
+

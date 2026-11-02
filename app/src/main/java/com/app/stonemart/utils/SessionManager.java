@@ -111,3 +111,4 @@ public class SessionManager {
         prefs.edit().clear().apply();
     }
 }
+

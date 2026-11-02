@@ -37,3 +37,4 @@ public class LeaveApprovalActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 }
+

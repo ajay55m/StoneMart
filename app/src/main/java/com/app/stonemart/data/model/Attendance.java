@@ -48,3 +48,4 @@ public class Attendance {
     public boolean isPresent() { return "P".equalsIgnoreCase(code); }
     public boolean isAbsent() { return "A".equalsIgnoreCase(code); }
 }
+

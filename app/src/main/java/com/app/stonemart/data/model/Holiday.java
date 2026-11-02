@@ -29,3 +29,4 @@ public class Holiday {
     public String getName() { return name; }
     public String getType() { return type; }
 }
+

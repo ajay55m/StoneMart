@@ -12,6 +12,10 @@ import com.google.android.gms.location.LocationServices;
  */
 public class LocationHelper {
 
+    public interface SimpleLocationCallback {
+        void onLocationReceived(double latitude, double longitude);
+    }
+
     public interface LocationCallback {
         void onLocationReceived(double latitude, double longitude, float distanceToStoreMeters,
                                 boolean isInsideGeofence);
@@ -20,8 +24,22 @@ public class LocationHelper {
     }
 
     @SuppressLint("MissingPermission")
+    public static void getCurrentLocation(Context context, SimpleLocationCallback callback) {
+        if (context == null || callback == null) return;
+        FusedLocationProviderClient fusedClient = LocationServices.getFusedLocationProviderClient(context);
+        fusedClient.getLastLocation().addOnSuccessListener(location -> {
+            if (location != null) {
+                callback.onLocationReceived(location.getLatitude(), location.getLongitude());
+            } else {
+                callback.onLocationReceived(0.0, 0.0);
+            }
+        }).addOnFailureListener(e -> callback.onLocationReceived(0.0, 0.0));
+    }
+
+    @SuppressLint("MissingPermission")
     public static void getCurrentLocation(Context context, double targetLat, double targetLng, float maxDistanceMeters,
                                           LocationCallback callback) {
+        if (context == null || callback == null) return;
         FusedLocationProviderClient fusedClient = LocationServices.getFusedLocationProviderClient(context);
         fusedClient.getLastLocation().addOnSuccessListener(location -> {
             if (location != null) {

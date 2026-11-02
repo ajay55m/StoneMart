@@ -57,3 +57,4 @@ public class User {
     public double getStoreLng() { return storeLng; }
     public float getRadiusMeters() { return radiusMeters; }
 }
+

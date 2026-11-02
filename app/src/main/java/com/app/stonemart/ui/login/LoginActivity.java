@@ -13,3 +13,4 @@ public class LoginActivity extends EmployeeLoginActivity {
         super.onCreate(savedInstanceState);
     }
 }
+

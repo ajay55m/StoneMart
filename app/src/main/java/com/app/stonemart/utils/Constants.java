@@ -14,9 +14,13 @@ public final class Constants {
     public static final String BASE_URL = "https://stonemart.org/SMCS_APP/fcm_app/";
     public static final String LOGIN_URL = BASE_URL + "subadminlogin.php";
     public static final String PUNCH_URL = BASE_URL + "submit_attendance.php";
+    public static final String GET_LOCATION_URL = BASE_URL + "get_location.php";
     public static final String HISTORY_URL = BASE_URL + "get_attendance_history.php";
     public static final String EMPLOYEE_DETAIL_URL = BASE_URL + "api-employee-detail.php";
     public static final String LEAVE_REQUEST_URL = BASE_URL + "api-leave-request.php";
+
+    // For testing, later replace with employee's assigned location
+    public static final int TEST_LOCATION_ID = 12;
 
     // SharedPreferences Namespaces
     public static final String PREF_NAME = "StoneMartPrefs";

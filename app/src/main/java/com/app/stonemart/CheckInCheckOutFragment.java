@@ -20,6 +20,10 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.app.stonemart.core.Resource;
+import com.app.stonemart.data.model.LocationMaster;
+import com.app.stonemart.data.repository.AttendanceRepository;
+import com.app.stonemart.utils.Constants;
+import com.app.stonemart.utils.LocationHelper;
 import com.app.stonemart.viewmodel.CheckInCheckOutViewModel;
 import com.app.stonemart.widget.GeofenceMapView;
 
@@ -29,13 +33,20 @@ import java.util.Locale;
 
 /**
  * CheckInCheckOutFragment - MVVM View for RTK Geofence attendance punching.
- * Observes CheckInCheckOutViewModel for geofence state, check-in status, and punch operations.
+ * Fetches office location dynamically from server (get_location.php), validates
+ * boundaries via LocationMaster (max_lat / max_long bounding box), blocks punches
+ * when outside, and submits location_id with punch verification.
  */
 public class CheckInCheckOutFragment extends Fragment {
 
     private static final int CAMERA_REQUEST_CODE = 101;
 
     private CheckInCheckOutViewModel viewModel;
+
+    private LocationMaster officeLocation;
+    private double currentLat = 0.0;
+    private double currentLng = 0.0;
+    private boolean isInsideGeofence = false;
 
     private TextView tvEmpNameClock;
     private TextView tvBadgeStatus;
@@ -67,21 +78,82 @@ public class CheckInCheckOutFragment extends Fragment {
 
         initViews(view);
         setupObservers();
-        verifyGeofenceLocation();
         timeHandler.post(timeRunnable);
 
         btnAction.setOnClickListener(v -> {
-            Boolean inside = viewModel.isInsideGeofence.getValue();
-            if (inside != null && !inside) {
-                Toast.makeText(requireContext(), "Geofence Verification Required! You are within ±1.2m Accuracy.",
-                        Toast.LENGTH_SHORT).show();
+            if (officeLocation == null) {
+                Toast.makeText(requireContext(), "Office location loading...", Toast.LENGTH_SHORT).show();
+                return;
             }
-            // Launch Camera for Mandatory Selfie Verification
-            Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-            startActivityForResult(cameraIntent, CAMERA_REQUEST_CODE);
+            if (!isInsideGeofence) {
+                Toast.makeText(requireContext(), "Geofence Verification Required! You are outside " + officeLocation.locationName, Toast.LENGTH_LONG).show();
+                return; // BLOCK - do not open camera
+            }
+            // Inside, now open camera for selfie verification
+            launchCamera();
         });
 
         return view;
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+
+        // 1. Fetch office location from server (get_location.php)
+        viewModel.fetchOfficeLocation(Constants.TEST_LOCATION_ID, new AttendanceRepository.LocationCallback() {
+            @Override
+            public void onLoaded(LocationMaster loc) {
+                officeLocation = loc;
+                if (isAdded()) {
+                    checkCurrentLocation(); // start GPS check
+                }
+            }
+
+            @Override
+            public void onError(String error) {
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), "Location Error: " + error, Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (officeLocation != null) {
+            checkCurrentLocation();
+        }
+    }
+
+    private void checkCurrentLocation() {
+        if (!isAdded() || officeLocation == null) return;
+
+        LocationHelper.getCurrentLocation(requireContext(), (lat, lng) -> {
+            if (!isAdded()) return;
+            currentLat = lat;
+            currentLng = lng;
+
+            // 2. Distance for display
+            float[] results = new float[1];
+            android.location.Location.distanceBetween(lat, lng, officeLocation.latitude, officeLocation.longitude, results);
+            float distance = results[0];
+
+            // 3. NEW VERIFICATION using max_lat / max_long bounding box
+            isInsideGeofence = officeLocation.isInside(lat, lng);
+
+            viewModel.updateLocation(lat, lng, distance, isInsideGeofence);
+
+            if (geofenceMapView != null) {
+                geofenceMapView.setInsideStatus(isInsideGeofence);
+            }
+        });
+    }
+
+    private void launchCamera() {
+        Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        startActivityForResult(cameraIntent, CAMERA_REQUEST_CODE);
     }
 
     private void initViews(View view) {
@@ -105,14 +177,16 @@ public class CheckInCheckOutFragment extends Fragment {
     private void setupObservers() {
         viewModel.isInsideGeofence.observe(getViewLifecycleOwner(), inside -> {
             if (inside == null) return;
+            isInsideGeofence = inside;
             if (geofenceMapView != null) {
                 geofenceMapView.setInsideStatus(inside);
             }
+            String siteName = officeLocation != null ? officeLocation.locationName : "Yard";
             if (inside) {
-                if (tvGeofenceStatus != null) tvGeofenceStatus.setText("±1.2m Accuracy");
+                if (tvGeofenceStatus != null) tvGeofenceStatus.setText("±1.2m Accuracy • " + siteName);
                 if (tvBadgeStatus != null) tvBadgeStatus.setText("IN RANGE");
             } else {
-                if (tvGeofenceStatus != null) tvGeofenceStatus.setText("⚠ Outside Yard");
+                if (tvGeofenceStatus != null) tvGeofenceStatus.setText("⚠ Outside " + siteName);
                 if (tvBadgeStatus != null) tvBadgeStatus.setText("OUT OF RANGE");
             }
         });
@@ -128,7 +202,7 @@ public class CheckInCheckOutFragment extends Fragment {
                     btnAction.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#2563EB"))); // Azure Blue
                 }
                 if (tvElapsedToday != null) {
-                    tvElapsedToday.setText("⏱ Elapsed Today: 3h 44m");
+                    tvElapsedToday.setText("⏱ Elapsed Today: Active Shift");
                 }
             } else {
                 if (tvStatus != null) {
@@ -156,24 +230,6 @@ public class CheckInCheckOutFragment extends Fragment {
         });
     }
 
-    private void verifyGeofenceLocation() {
-        UserLocalStore userStore = viewModel.getUserStore();
-        LocationHelper.getCurrentLocation(requireContext(), userStore.getStoreLat(), userStore.getStoreLng(),
-                userStore.getRadiusMeters(),
-                new LocationHelper.LocationCallback() {
-                    @Override
-                    public void onLocationReceived(double latitude, double longitude, float distanceMeters,
-                                                    boolean inside) {
-                        viewModel.updateLocation(latitude, longitude, distanceMeters, inside);
-                    }
-
-                    @Override
-                    public void onError(String errorMessage) {
-                        if (tvGeofenceStatus != null) tvGeofenceStatus.setText("GPS RTK: Active");
-                    }
-                });
-    }
-
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -184,7 +240,11 @@ public class CheckInCheckOutFragment extends Fragment {
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == CAMERA_REQUEST_CODE && resultCode == android.app.Activity.RESULT_OK) {
-            viewModel.submitPunch();
+            if (officeLocation != null) {
+                viewModel.submitPunch(officeLocation.id, officeLocation.locationName);
+            } else {
+                viewModel.submitPunch();
+            }
         }
     }
 }

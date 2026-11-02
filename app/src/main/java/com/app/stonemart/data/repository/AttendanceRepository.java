@@ -5,6 +5,8 @@ import android.content.Context;
 import com.app.stonemart.ApiClient;
 import com.app.stonemart.ApiConfig;
 import com.app.stonemart.UserLocalStore;
+import com.app.stonemart.data.model.LocationMaster;
+import com.app.stonemart.utils.Constants;
 
 import org.json.JSONObject;
 
@@ -15,7 +17,7 @@ import java.util.Map;
 
 /**
  * AttendanceRepository - Single source of truth for attendance records,
- * monthly detail data, calendar metrics, caching, and punch check-in/out.
+ * monthly detail data, calendar metrics, caching, location master fetching, and punch check-in/out.
  */
 public class AttendanceRepository {
 
@@ -29,6 +31,11 @@ public class AttendanceRepository {
         void onFallbackSaved(String message, String timestamp, String action);
     }
 
+    public interface LocationCallback {
+        void onLoaded(LocationMaster location);
+        void onError(String error);
+    }
+
     private final UserLocalStore userStore;
 
     public AttendanceRepository(Context context) {
@@ -37,6 +44,53 @@ public class AttendanceRepository {
 
     public UserLocalStore getUserStore() {
         return userStore;
+    }
+
+    /**
+     * Fetch Office Location Master from server (get_location.php)
+     */
+    public void fetchLocation(int locationId, LocationCallback callback) {
+        Map<String, String> params = new HashMap<>();
+        params.put("location_id", String.valueOf(locationId));
+
+        ApiClient.postRequest(Constants.GET_LOCATION_URL, params, new ApiClient.ApiCallback() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                try {
+                    if (response != null && ("success".equalsIgnoreCase(response.optString("status")) || response.optBoolean("success", false))) {
+                        JSONObject d = response.optJSONObject("data");
+                        if (d != null) {
+                            LocationMaster loc = new LocationMaster();
+                            loc.id = d.optInt("id", locationId);
+                            loc.locationName = d.optString("location_name", "Office Location");
+                            loc.latitude = d.optDouble("latitude", 0.0);
+                            loc.longitude = d.optDouble("longitude", 0.0);
+                            loc.maxLat = d.optDouble("max_lat", 0.0);
+                            loc.maxLong = d.optDouble("max_long", 0.0);
+                            if (callback != null) {
+                                callback.onLoaded(loc);
+                            }
+                            return;
+                        }
+                    }
+                    String msg = response != null ? response.optString("message", "Unable to fetch location details") : "Empty response";
+                    if (callback != null) {
+                        callback.onError(msg);
+                    }
+                } catch (Exception e) {
+                    if (callback != null) {
+                        callback.onError(e.getMessage() != null ? e.getMessage() : "Failed to parse location data");
+                    }
+                }
+            }
+
+            @Override
+            public void onError(String error) {
+                if (callback != null) {
+                    callback.onError(error);
+                }
+            }
+        });
     }
 
     /**
@@ -90,15 +144,17 @@ public class AttendanceRepository {
     }
 
     /**
-     * Submit Check-In or Check-Out Punch
+     * Submit Check-In or Check-Out Punch with dynamic location_id and location name
      */
-    public void submitPunch(String action, String currentTime, double latitude, double longitude, PunchCallback callback) {
+    public void submitPunch(String action, String currentTime, double latitude, double longitude,
+                            int locationId, String locationName, PunchCallback callback) {
         Map<String, String> params = new HashMap<>();
         params.put("emp_id", userStore.getEmpId());
         params.put("staffid", String.valueOf(userStore.getStaffId()));
         params.put("action", action);
         params.put("time", currentTime);
-        params.put("store_name", userStore.getStoreName());
+        params.put("store_name", locationName != null && !locationName.isEmpty() ? locationName : userStore.getStoreName());
+        params.put("location_id", String.valueOf(locationId));
         params.put("lat", String.valueOf(latitude));
         params.put("lng", String.valueOf(longitude));
 
@@ -107,7 +163,7 @@ public class AttendanceRepository {
             public void onSuccess(JSONObject response) {
                 String serverMsg = response.optString("message", "Punch recorded successfully");
                 if ("CHECK_IN".equals(action)) {
-                    userStore.savePunchInState(currentTime, userStore.getStoreName());
+                    userStore.savePunchInState(currentTime, locationName != null ? locationName : userStore.getStoreName());
                 } else {
                     userStore.savePunchOutState(currentTime);
                 }
@@ -120,7 +176,7 @@ public class AttendanceRepository {
             public void onError(String errorMessage) {
                 // Offline fallback save
                 if ("CHECK_IN".equals(action)) {
-                    userStore.savePunchInState(currentTime, userStore.getStoreName());
+                    userStore.savePunchInState(currentTime, locationName != null ? locationName : userStore.getStoreName());
                 } else {
                     userStore.savePunchOutState(currentTime);
                 }
@@ -130,5 +186,11 @@ public class AttendanceRepository {
             }
         });
     }
-}
 
+    /**
+     * Overloaded submitPunch defaulting to assigned store details
+     */
+    public void submitPunch(String action, String currentTime, double latitude, double longitude, PunchCallback callback) {
+        submitPunch(action, currentTime, latitude, longitude, Constants.TEST_LOCATION_ID, userStore.getStoreName(), callback);
+    }
+}
