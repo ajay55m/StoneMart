@@ -13,3 +13,4 @@ public class LocationMaster {
             && empLng >= getMinLong() && empLng <= maxLong;
     }
 }
+
