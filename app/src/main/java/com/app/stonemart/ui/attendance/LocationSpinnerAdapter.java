@@ -77,3 +77,4 @@ public class LocationSpinnerAdapter extends ArrayAdapter<LocationMaster> {
         return convertView;
     }
 }
+

@@ -3,21 +3,21 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?android:attr/selectableItemBackground"
+    android:background="#FFFFFF"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="16dp"
-    android:paddingTop="12dp"
+    android:paddingTop="14dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="12dp">
+    android:paddingBottom="14dp">
 
     <ImageView
         android:id="@+id/ivDropdownPin"
         android:layout_width="22dp"
         android:layout_height="22dp"
+        android:contentDescription="Location Pin"
         android:src="@drawable/ic_map_pin"
-        app:tint="#2563EB"
-        android:contentDescription="Location Pin" />
+        app:tint="#2563EB" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -50,9 +50,9 @@
         android:layout_width="18dp"
         android:layout_height="18dp"
         android:layout_marginStart="8dp"
+        android:contentDescription="Selected Check"
         android:src="@drawable/ic_check_circle"
         android:visibility="gone"
-        app:tint="#10B981"
-        android:contentDescription="Selected Check" />
+        app:tint="#10B981" />
 
 </LinearLayout>

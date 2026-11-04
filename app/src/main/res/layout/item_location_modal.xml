@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/layoutModalLocationItem"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
+    android:background="@drawable/bg_leave_modal_item"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="12dp">
+
+    <!-- Icon Badge -->
+    <RelativeLayout
+        android:id="@+id/layoutModalPinBg"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_dialog_icon_circle"
+        android:backgroundTint="#EFF6FF">
+
+        <ImageView
+            android:id="@+id/ivModalPin"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_centerInParent="true"
+            android:contentDescription="Pin"
+            android:src="@drawable/ic_map_pin"
+            app:tint="#2563EB" />
+    </RelativeLayout>
+
+    <!-- Location Text Info -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="10dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvModalLocationName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Location Name"
+            android:textColor="#0F172A"
+            android:textSize="14.5sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvModalLocationCoords"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="ID: 12 • Lat: 8.1866, Lng: 77.4247"
+            android:textColor="#64748B"
+            android:textSize="11.5sp" />
+    </LinearLayout>
+
+    <!-- Selected Checkmark -->
+    <ImageView
+        android:id="@+id/ivModalLocationCheck"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:contentDescription="Selected"
+        android:src="@drawable/ic_check_circle"
+        android:visibility="gone"
+        app:tint="#2563EB" />
+
+</LinearLayout>

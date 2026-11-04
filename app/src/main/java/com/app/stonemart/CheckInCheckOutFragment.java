@@ -3,6 +3,7 @@ package com.app.stonemart;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,6 +13,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -24,19 +28,22 @@ import androidx.lifecycle.ViewModelProvider;
 import com.app.stonemart.core.Resource;
 import com.app.stonemart.data.model.LocationMaster;
 import com.app.stonemart.ui.attendance.LocationSpinnerAdapter;
+import com.app.stonemart.utils.Constants;
 import com.app.stonemart.utils.LocationHelper;
 import com.app.stonemart.viewmodel.CheckInCheckOutViewModel;
 import com.app.stonemart.widget.GeofenceMapView;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 /**
  * CheckInCheckOutFragment - MVVM View for RTK Geofence attendance punching.
- * Displays available work locations in a dropdown. Upon selecting a location,
- * performs live GPS verification against that site's geofence boundaries,
- * updates the RTK map view & status badges, blocks punches if outside,
+ * Displays available work locations in a sleek Material bottom sheet dropdown.
+ * Upon selecting a location, performs live GPS verification against that site's
+ * geofence boundaries, updates the RTK map view & status badges, blocks punches if outside,
  * and submits location_id with punch verification.
  */
 public class CheckInCheckOutFragment extends Fragment {
@@ -61,8 +68,11 @@ public class CheckInCheckOutFragment extends Fragment {
     private Button btnAction;
     private GeofenceMapView geofenceMapView;
 
-    private Spinner spLocationSelect;
     private View layoutLocationSpinner;
+    private TextView tvSelectedLocationName;
+    private TextView tvSelectedLocationSub;
+    private ImageView ivChevronLocation;
+    private Spinner spLocationSelect;
     private LocationSpinnerAdapter locationAdapter;
 
     private final Handler timeHandler = new Handler(Looper.getMainLooper());
@@ -126,6 +136,25 @@ public class CheckInCheckOutFragment extends Fragment {
             currentLat = lat;
             currentLng = lng;
 
+            // Handle unacquired GPS fix gracefully without false distance from (0,0)
+            if (lat == 0.0 && lng == 0.0) {
+                isInsideGeofence = false;
+                viewModel.updateLocation(0, 0, 0, false);
+                if (geofenceMapView != null) {
+                    geofenceMapView.setInsideStatus(false);
+                }
+                if (tvBadgeStatus != null) {
+                    tvBadgeStatus.setText("WAITING GPS");
+                    tvBadgeStatus.setTextColor(Color.parseColor("#D97706"));
+                    tvBadgeStatus.setBackgroundResource(R.drawable.bg_badge_unpaid);
+                }
+                if (tvGeofenceStatus != null) {
+                    tvGeofenceStatus.setText("📡 Acquiring GPS satellite fix... Please ensure Location is ON");
+                    tvGeofenceStatus.setTextColor(Color.parseColor("#D97706"));
+                }
+                return;
+            }
+
             // 1. Distance for display
             float[] results = new float[1];
             android.location.Location.distanceBetween(lat, lng, officeLocation.latitude, officeLocation.longitude, results);
@@ -140,18 +169,29 @@ public class CheckInCheckOutFragment extends Fragment {
                 geofenceMapView.setInsideStatus(isInsideGeofence);
             }
 
-            // 3. Update status badges and texts
+            // 3. Update status badges and texts with clean kilometer / meter formatting
             if (tvBadgeStatus != null) {
-                tvBadgeStatus.setText(isInsideGeofence ? "IN RANGE" : "OUT OF RANGE");
-                tvBadgeStatus.setTextColor(isInsideGeofence ? Color.parseColor("#15803D") : Color.parseColor("#B91C1C"));
-                tvBadgeStatus.setBackgroundResource(isInsideGeofence ? R.drawable.bg_badge_emerald : R.drawable.bg_badge_rose);
+                if (isInsideGeofence) {
+                    tvBadgeStatus.setText("IN RANGE");
+                    tvBadgeStatus.setTextColor(Color.parseColor("#15803D"));
+                    tvBadgeStatus.setBackgroundResource(R.drawable.bg_badge_emerald);
+                } else {
+                    tvBadgeStatus.setText("OUT OF RANGE");
+                    tvBadgeStatus.setTextColor(Color.parseColor("#B91C1C"));
+                    tvBadgeStatus.setBackgroundResource(R.drawable.bg_badge_rose);
+                }
             }
 
             if (tvGeofenceStatus != null) {
                 if (isInsideGeofence) {
-                    tvGeofenceStatus.setText(String.format(Locale.getDefault(), "±1.2m Accuracy • %s (%.0fm)", officeLocation.locationName, distance));
+                    tvGeofenceStatus.setText(String.format(Locale.getDefault(), "±1.2m Accuracy • %s (%.0fm away)", officeLocation.locationName, distance));
+                    tvGeofenceStatus.setTextColor(Color.parseColor("#059669"));
                 } else {
-                    tvGeofenceStatus.setText(String.format(Locale.getDefault(), "⚠ Outside %s (%.0fm away)", officeLocation.locationName, distance));
+                    String distStr = distance >= 1000
+                            ? String.format(Locale.US, "%.1f km away", distance / 1000f)
+                            : String.format(Locale.US, "%.0fm away", distance);
+                    tvGeofenceStatus.setText(String.format(Locale.getDefault(), "⚠ Outside %s (%s)", officeLocation.locationName, distStr));
+                    tvGeofenceStatus.setTextColor(Color.parseColor("#DC2626"));
                 }
             }
         });
@@ -173,11 +213,24 @@ public class CheckInCheckOutFragment extends Fragment {
         tvElapsedToday = view.findViewById(R.id.tvElapsedToday);
         btnAction = view.findViewById(R.id.btnAction);
         geofenceMapView = view.findViewById(R.id.geofenceMapView);
-        spLocationSelect = view.findViewById(R.id.spLocationSelect);
-        layoutLocationSpinner = view.findViewById(R.id.layoutLocationSpinner);
 
-        if (layoutLocationSpinner != null && spLocationSelect != null) {
-            layoutLocationSpinner.setOnClickListener(v -> spLocationSelect.performClick());
+        layoutLocationSpinner = view.findViewById(R.id.layoutLocationSpinner);
+        tvSelectedLocationName = view.findViewById(R.id.tvSelectedLocationName);
+        tvSelectedLocationSub = view.findViewById(R.id.tvSelectedLocationSub);
+        ivChevronLocation = view.findViewById(R.id.ivChevronLocation);
+        spLocationSelect = view.findViewById(R.id.spLocationSelect);
+
+        if (layoutLocationSpinner != null) {
+            layoutLocationSpinner.setOnClickListener(v -> {
+                if (ivChevronLocation != null) {
+                    ivChevronLocation.animate().rotation(180f).setDuration(150).withEndAction(() -> {
+                        showLocationBottomSheet();
+                        ivChevronLocation.animate().rotation(0f).setDuration(200).start();
+                    }).start();
+                } else {
+                    showLocationBottomSheet();
+                }
+            });
         }
 
         if (tvEmpNameClock != null) {
@@ -195,54 +248,138 @@ public class CheckInCheckOutFragment extends Fragment {
         }
     }
 
+    /**
+     * Opens a clean, modern Material Bottom Sheet displaying all available work locations
+     * with crystal clear contrast, icons, coordinates, and instant selection.
+     */
+    private void showLocationBottomSheet() {
+        if (!isAdded()) return;
+        List<LocationMaster> locations = viewModel.availableLocations.getValue();
+        if (locations == null || locations.isEmpty()) {
+            locations = viewModel.getRepository().getDefaultLocations();
+        }
+
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        View sheetView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_bottom_sheet_location, null);
+        dialog.setContentView(sheetView);
+
+        View bottomSheetInternal = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        if (bottomSheetInternal != null) {
+            bottomSheetInternal.setBackground(new ColorDrawable(Color.TRANSPARENT));
+        }
+
+        ImageView ivClose = sheetView.findViewById(R.id.ivCloseLocationModal);
+        if (ivClose != null) {
+            ivClose.setOnClickListener(v -> dialog.dismiss());
+        }
+
+        LinearLayout layoutModalList = sheetView.findViewById(R.id.layoutModalLocationList);
+        if (layoutModalList != null) {
+            layoutModalList.removeAllViews();
+            LayoutInflater inflater = LayoutInflater.from(requireContext());
+
+            for (LocationMaster loc : locations) {
+                View itemView = inflater.inflate(R.layout.item_location_modal, layoutModalList, false);
+                TextView tvName = itemView.findViewById(R.id.tvModalLocationName);
+                TextView tvCoords = itemView.findViewById(R.id.tvModalLocationCoords);
+                ImageView ivCheck = itemView.findViewById(R.id.ivModalLocationCheck);
+                RelativeLayout layoutPinBg = itemView.findViewById(R.id.layoutModalPinBg);
+                ImageView ivPin = itemView.findViewById(R.id.ivModalPin);
+
+                boolean isSelected = officeLocation != null && officeLocation.id == loc.id;
+
+                tvName.setText(loc.locationName);
+                tvCoords.setText(String.format(Locale.US, "ID: %d • Lat: %.4f, Lng: %.4f", loc.id, loc.latitude, loc.longitude));
+
+                if (isSelected) {
+                    itemView.setBackgroundResource(R.drawable.bg_leave_modal_item_selected);
+                    ivCheck.setVisibility(View.VISIBLE);
+                    tvName.setTextColor(Color.parseColor("#1D4ED8"));
+                    layoutPinBg.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#2563EB")));
+                    ivPin.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+                } else {
+                    itemView.setBackgroundResource(R.drawable.bg_leave_modal_item);
+                    ivCheck.setVisibility(View.GONE);
+                    tvName.setTextColor(Color.parseColor("#0F172A"));
+                    layoutPinBg.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#EFF6FF")));
+                    ivPin.setImageTintList(ColorStateList.valueOf(Color.parseColor("#2563EB")));
+                }
+
+                itemView.setOnClickListener(v -> {
+                    officeLocation = loc;
+                    viewModel.selectLocation(loc);
+                    updateSelectedLocationUI(loc);
+                    dialog.dismiss();
+                    checkCurrentLocation();
+                });
+
+                layoutModalList.addView(itemView);
+            }
+        }
+
+        dialog.show();
+    }
+
+    private void updateSelectedLocationUI(LocationMaster loc) {
+        if (loc == null) return;
+        if (tvSelectedLocationName != null) {
+            tvSelectedLocationName.setText(loc.locationName);
+        }
+        if (tvSelectedLocationSub != null) {
+            tvSelectedLocationSub.setText(String.format(Locale.US, "ID: %d • Lat: %.4f, Lng: %.4f", loc.id, loc.latitude, loc.longitude));
+        }
+        if (tvProfileEmpSub != null) {
+            tvProfileEmpSub.setText(loc.locationName);
+        }
+        if (geofenceMapView != null) {
+            geofenceMapView.updateTargetLocation(loc.locationName, loc.latitude, loc.longitude);
+        }
+    }
+
     private void setupObservers() {
         // Dropdown available locations
         viewModel.availableLocations.observe(getViewLifecycleOwner(), locations -> {
             if (locations == null || locations.isEmpty() || !isAdded()) return;
 
             locationAdapter = new LocationSpinnerAdapter(requireContext(), locations);
-            spLocationSelect.setAdapter(locationAdapter);
+            if (spLocationSelect != null) {
+                spLocationSelect.setAdapter(locationAdapter);
+            }
 
-            int selectedIdx = 0;
             LocationMaster current = officeLocation != null ? officeLocation : viewModel.getOfficeLocation();
-            if (current != null) {
-                for (int i = 0; i < locations.size(); i++) {
-                    if (locations.get(i).id == current.id) {
-                        selectedIdx = i;
+            if (current == null) {
+                current = locations.get(0);
+                for (LocationMaster loc : locations) {
+                    if (loc.id == Constants.TEST_LOCATION_ID) {
+                        current = loc;
                         break;
                     }
                 }
             }
-            spLocationSelect.setSelection(selectedIdx);
-            locationAdapter.setSelectedPosition(selectedIdx);
+            officeLocation = current;
+            updateSelectedLocationUI(current);
+            checkCurrentLocation();
         });
 
-        // Dropdown location selection listener
-        spLocationSelect.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                LocationMaster loc = (LocationMaster) parent.getItemAtPosition(position);
-                if (loc != null) {
-                    officeLocation = loc;
-                    viewModel.selectLocation(loc);
-                    if (locationAdapter != null) {
-                        locationAdapter.setSelectedPosition(position);
+        // Dropdown location selection listener (for fallback spinner)
+        if (spLocationSelect != null) {
+            spLocationSelect.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    LocationMaster loc = (LocationMaster) parent.getItemAtPosition(position);
+                    if (loc != null) {
+                        officeLocation = loc;
+                        viewModel.selectLocation(loc);
+                        updateSelectedLocationUI(loc);
+                        checkCurrentLocation();
                     }
-                    if (tvProfileEmpSub != null) {
-                        tvProfileEmpSub.setText(loc.locationName);
-                    }
-                    if (geofenceMapView != null) {
-                        geofenceMapView.updateTargetLocation(loc.locationName, loc.latitude, loc.longitude);
-                    }
-                    // Immediately re-verify GPS against newly selected location!
-                    checkCurrentLocation();
                 }
-            }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+                }
+            });
+        }
 
         viewModel.isInsideGeofence.observe(getViewLifecycleOwner(), inside -> {
             if (inside == null) return;
@@ -252,14 +389,20 @@ public class CheckInCheckOutFragment extends Fragment {
             }
             String siteName = officeLocation != null ? officeLocation.locationName : "Yard";
             if (inside) {
-                if (tvGeofenceStatus != null) tvGeofenceStatus.setText("±1.2m Accuracy • " + siteName);
+                if (tvGeofenceStatus != null) {
+                    tvGeofenceStatus.setText("±1.2m Accuracy • " + siteName);
+                    tvGeofenceStatus.setTextColor(Color.parseColor("#059669"));
+                }
                 if (tvBadgeStatus != null) {
                     tvBadgeStatus.setText("IN RANGE");
                     tvBadgeStatus.setTextColor(Color.parseColor("#15803D"));
                     tvBadgeStatus.setBackgroundResource(R.drawable.bg_badge_emerald);
                 }
             } else {
-                if (tvGeofenceStatus != null) tvGeofenceStatus.setText("⚠ Outside " + siteName);
+                if (tvGeofenceStatus != null) {
+                    tvGeofenceStatus.setText("⚠ Outside " + siteName);
+                    tvGeofenceStatus.setTextColor(Color.parseColor("#DC2626"));
+                }
                 if (tvBadgeStatus != null) {
                     tvBadgeStatus.setText("OUT OF RANGE");
                     tvBadgeStatus.setTextColor(Color.parseColor("#B91C1C"));
