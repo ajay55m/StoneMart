@@ -37,6 +37,9 @@ public class GeofenceMapView extends View {
     private float radarRadiusFactor = 0f;
     private ValueAnimator radarAnimator;
     private boolean isInside = true;
+    private String siteName = "Yard #4";
+    private double targetLat = 26.9124;
+    private double targetLng = 75.7873;
 
     private Path roadPath1 = new Path();
     private Path roadPath2 = new Path();
@@ -155,6 +158,15 @@ public class GeofenceMapView extends View {
         invalidate();
     }
 
+    public void updateTargetLocation(String name, double lat, double lng) {
+        if (name != null && !name.trim().isEmpty()) {
+            this.siteName = name;
+        }
+        if (lat != 0.0) this.targetLat = lat;
+        if (lng != 0.0) this.targetLng = lng;
+        invalidate();
+    }
+
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
@@ -226,7 +238,7 @@ public class GeofenceMapView extends View {
         float poi2X = cx + radius * 0.5f;
         float poi2Y = cy + radius * 0.5f;
         canvas.drawCircle(poi2X, poi2Y, dpToPx(4f), poiPaint);
-        canvas.drawText("Quarry Yard #4", poi2X + dpToPx(7f), poi2Y + dpToPx(3f), poiTextPaint);
+        canvas.drawText(siteName, poi2X + dpToPx(7f), poi2Y + dpToPx(3f), poiTextPaint);
 
         // 6. User Live GPS Location Marker Pin with Pulse
         float pinX = isInside ? cx + dpToPx(8f) : width * 0.18f;
@@ -240,7 +252,7 @@ public class GeofenceMapView extends View {
         canvas.drawCircle(pinX, pinY, dpToPx(3.5f), userPinInnerPaint);
 
         // 7. Top Floating Glass Status Card
-        String cardText = isInside ? "📍 Yard #4 Quarry Geofence • Locked" : "⚠️ Outside Geofence Zone";
+        String cardText = isInside ? "📍 " + siteName + " • Locked" : "⚠️ Outside Geofence Zone";
         float cardTextW = glassCardTextPaint.measureText(cardText);
         float cardW = cardTextW + dpToPx(20f);
         float cardH = dpToPx(28f);
@@ -260,7 +272,7 @@ public class GeofenceMapView extends View {
 
         // Bottom Coordinates Footer
         subLabelPaint.setTextAlign(Paint.Align.RIGHT);
-        canvas.drawText("Lat: 26.9124, Lng: 75.7873 • 5G Beacon GT-884", width - dpToPx(12f), height - dpToPx(8f), subLabelPaint);
+        canvas.drawText(String.format(java.util.Locale.US, "Lat: %.4f, Lng: %.4f • 5G Beacon GT-884", targetLat, targetLng), width - dpToPx(12f), height - dpToPx(8f), subLabelPaint);
     }
 
     private float dpToPx(float dp) {

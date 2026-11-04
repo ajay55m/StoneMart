@@ -100,9 +100,12 @@
                             android:layout_height="wrap_content"
                             android:layout_alignParentLeft="true"
                             android:layout_centerVertical="true"
+                            android:layout_toLeftOf="@+id/tvBadgeStatus"
+                            android:layout_marginRight="10dp"
                             android:orientation="vertical">
 
                             <TextView
+                                android:id="@+id/tvProfileEmpName"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Vikram Mehta • SM-4029"
@@ -111,6 +114,7 @@
                                 android:textStyle="bold" />
 
                             <TextView
+                                android:id="@+id/tvProfileEmpSub"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
@@ -125,16 +129,78 @@
                             android:layout_height="wrap_content"
                             android:layout_alignParentRight="true"
                             android:layout_centerVertical="true"
-                            android:background="#FFFFFF"
+                            android:background="@drawable/bg_badge_emerald"
                             android:paddingLeft="10dp"
                             android:paddingTop="5dp"
                             android:paddingRight="10dp"
                             android:paddingBottom="5dp"
                             android:text="IN RANGE"
-                            android:textColor="#1D4ED8"
+                            android:textColor="#15803D"
                             android:textSize="11sp"
                             android:textStyle="bold" />
                     </RelativeLayout>
+
+                    <!-- Thin Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="12dp"
+                        android:background="#33FFFFFF" />
+
+                    <!-- Available Location Dropdown Section -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:letterSpacing="0.04"
+                            android:text="SELECT WORK LOCATION / YARD"
+                            android:textColor="#BFDBFE"
+                            android:textSize="10.5sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:id="@+id/layoutLocationSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="46dp"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/bg_spinner_card"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="10dp">
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:contentDescription="Location Icon"
+                                android:src="@drawable/ic_map_pin"
+                                app:tint="#93C5FD" />
+
+                            <Spinner
+                                android:id="@+id/spLocationSelect"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:layout_marginStart="8dp"
+                                android:layout_marginEnd="6dp"
+                                android:background="@android:color/transparent"
+                                android:dropDownVerticalOffset="4dp"
+                                android:overlapAnchor="false"
+                                android:spinnerMode="dropdown" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="Dropdown Icon"
+                                android:src="@drawable/ic_chevron_down"
+                                app:tint="#FFFFFF" />
+                        </LinearLayout>
+                    </LinearLayout>
                 </LinearLayout>
 
             </LinearLayout>

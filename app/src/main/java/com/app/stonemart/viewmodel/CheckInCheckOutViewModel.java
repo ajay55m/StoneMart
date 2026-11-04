@@ -15,15 +15,19 @@ import com.app.stonemart.utils.Constants;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 /**
  * CheckInCheckOutViewModel - Encapsulates geofence tracking, dynamic location fetching,
- * and punch submission state.
+ * multi-location dropdown selection, and punch submission state.
  */
 public class CheckInCheckOutViewModel extends AndroidViewModel {
 
     private final AttendanceRepository repository;
+
+    private final MutableLiveData<List<LocationMaster>> _availableLocations = new MutableLiveData<>();
+    public final LiveData<List<LocationMaster>> availableLocations = _availableLocations;
 
     private final MutableLiveData<LocationMaster> _officeLocation = new MutableLiveData<>();
     public final LiveData<LocationMaster> officeLocation = _officeLocation;
@@ -47,6 +51,28 @@ public class CheckInCheckOutViewModel extends AndroidViewModel {
         super(application);
         this.repository = new AttendanceRepository(application);
         _isCheckedIn.setValue(repository.getUserStore().isCheckedIn());
+        loadAvailableLocations();
+    }
+
+    public void loadAvailableLocations() {
+        repository.fetchAvailableLocations(locations -> {
+            _availableLocations.setValue(locations);
+            if (_officeLocation.getValue() == null && locations != null && !locations.isEmpty()) {
+                // Default to Rathna Softnet Office (ID 12) if available, else first item
+                LocationMaster defaultLoc = locations.get(0);
+                for (LocationMaster loc : locations) {
+                    if (loc.id == Constants.TEST_LOCATION_ID) {
+                        defaultLoc = loc;
+                        break;
+                    }
+                }
+                _officeLocation.setValue(defaultLoc);
+            }
+        });
+    }
+
+    public void selectLocation(LocationMaster location) {
+        _officeLocation.setValue(location);
     }
 
     public AttendanceRepository getRepository() {
